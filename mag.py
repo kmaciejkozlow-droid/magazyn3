@@ -1,6 +1,7 @@
 import streamlit as st
 from supabase import create_client
 
+# --- Inicjalizacja Supabase ---
 @st.cache_resource
 def init_supabase():
     return create_client(
@@ -10,22 +11,25 @@ def init_supabase():
 
 supabase = init_supabase()
 
+# --- Test połączenia ---
 try:
     supabase.table("magazyn").select("id").limit(1).execute()
     st.success("✅ Połączono z Supabase")
 except Exception as e:
     st.error(f"❌ Błąd połączenia: {e}")
 
-
-
+# --- Konfiguracja strony ---
 st.set_page_config(page_title="Prosty magazyn", page_icon="📦")
-
-# Inicjalizacja magazynu w pamięci (lista słowników)
-if "magazyn" not in st.session_state:
-    st.session_state.magazyn = []
-
 st.title("📦 Prosty magazyn towarów")
-st.caption("Dane przechowywane są tylko w pamięci aplikacji (brak zapisu do plików).")
+
+# --- Pobranie produktów z Supabase ---
+if "magazyn" not in st.session_state:
+    result = supabase.table("magazyn").select("*").execute()
+    if result.error:
+        st.session_state.magazyn = []
+        st.error(f"Błąd pobierania danych: {result.error.message}")
+    else:
+        st.session_state.magazyn = result.data
 
 # --- Formularz dodawania towaru ---
 with st.form("dodaj_towar"):
@@ -36,16 +40,21 @@ with st.form("dodaj_towar"):
     dodaj = st.form_submit_button("Dodaj")
 
     if dodaj and nazwa:
-        st.session_state.magazyn.append({
+        response = supabase.table("magazyn").insert({
             "nazwa": nazwa,
             "ilosc": ilosc,
             "cena": cena
-        })
-        st.success(f"Dodano towar: {nazwa}")
+        }).execute()
+
+        if response.error:
+            st.error(f"Błąd dodawania: {response.error.message}")
+        else:
+            st.success(f"Dodano towar: {nazwa}")
+            # Odświeżenie listy magazynu
+            st.session_state.magazyn.append(response.data[0])
 
 # --- Wyświetlanie magazynu ---
 st.subheader("Stan magazynu")
-
 if st.session_state.magazyn:
     for i, towar in enumerate(st.session_state.magazyn):
         col1, col2, col3, col4 = st.columns([4, 2, 2, 1])
@@ -53,19 +62,24 @@ if st.session_state.magazyn:
         col2.write(f"Ilość: {towar['ilosc']}")
         col3.write(f"Cena: {towar['cena']} zł")
         if col4.button("❌", key=f"usun_{i}"):
-            st.session_state.magazyn.pop(i)
-            st.experimental_rerun()
+            response = supabase.table("magazyn").delete().eq("id", towar["id"]).execute()
+            if response.error:
+                st.error(f"Błąd usuwania: {response.error.message}")
+            else:
+                st.session_state.magazyn.pop(i)
+                st.experimental_rerun()
 else:
     st.info("Magazyn jest pusty.")
 
-# --- Podsumowanie ---
+# --- Podsumowanie wartości magazynu ---
 st.subheader("Podsumowanie")
-wartosc = sum(t["ilosc"] * t["cena"] for t in st.session_state.magazyn)
+wartosc = sum(t["ilosc"] * float(t["cena"]) for t in st.session_state.magazyn)
 st.write(f"Łączna wartość magazynu: **{wartosc:.2f} zł**")
 
 st.divider()
-st.caption("Aplikacja demonstracyjna – idealna do uruchomienia na Streamlit Cloud z GitHuba.")
-# --- Formularz usuwania ilości towaru ---
+st.caption("Aplikacja demonstracyjna – dane zapisywane w Supabase.")
+
+# --- Formularz usuwania / wydania towaru ---
 st.divider()
 st.subheader("Usuń / wydaj towar")
 
@@ -84,14 +98,23 @@ if st.session_state.magazyn:
         if usun:
             for t in st.session_state.magazyn:
                 if t["nazwa"] == wybrany:
-                    if ilosc_do_usuniecia >= t["ilosc"]:
-                        st.session_state.magazyn.remove(t)
-                        st.success(f"Usunięto cały towar: {wybrany}")
+                    nowa_ilosc = t["ilosc"] - ilosc_do_usuniecia
+                    if nowa_ilosc <= 0:
+                        response = supabase.table("magazyn").delete().eq("id", t["id"]).execute()
+                        if response.error:
+                            st.error(f"Błąd usuwania: {response.error.message}")
+                        else:
+                            st.session_state.magazyn.remove(t)
+                            st.success(f"Usunięto cały towar: {wybrany}")
                     else:
-                        t["ilosc"] -= ilosc_do_usuniecia
-                        st.success(
-                            f"Usunięto {ilosc_do_usuniecia} szt. z {wybrany}"
-                        )
+                        response = supabase.table("magazyn").update({
+                            "ilosc": nowa_ilosc
+                        }).eq("id", t["id"]).execute()
+                        if response.error:
+                            st.error(f"Błąd aktualizacji: {response.error.message}")
+                        else:
+                            t["ilosc"] = nowa_ilosc
+                            st.success(f"Usunięto {ilosc_do_usuniecia} szt. z {wybrany}")
                     st.rerun()
 else:
     st.info("Brak towarów do usunięcia.")
