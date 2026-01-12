@@ -74,6 +74,6 @@ if st.session_state.magazyn:
                         st.success(
                             f"Usunięto {ilosc_do_usuniecia} szt. z {wybrany}"
                         )
-                    st.experimental_rerun()
+                    st.rerun()
 else:
     st.info("Brak towarów do usunięcia.")
