@@ -47,3 +47,33 @@ st.write(f"Łączna wartość magazynu: **{wartosc:.2f} zł**")
 
 st.divider()
 st.caption("Aplikacja demonstracyjna – idealna do uruchomienia na Streamlit Cloud z GitHuba.")
+# --- Formularz usuwania ilości towaru ---
+st.divider()
+st.subheader("Usuń / wydaj towar")
+
+if st.session_state.magazyn:
+    nazwy = [t["nazwa"] for t in st.session_state.magazyn]
+
+    with st.form("usun_towar"):
+        wybrany = st.selectbox("Wybierz towar", nazwy)
+        ilosc_do_usuniecia = st.number_input(
+            "Ilość do usunięcia",
+            min_value=1,
+            step=1
+        )
+        usun = st.form_submit_button("Usuń z magazynu")
+
+        if usun:
+            for t in st.session_state.magazyn:
+                if t["nazwa"] == wybrany:
+                    if ilosc_do_usuniecia >= t["ilosc"]:
+                        st.session_state.magazyn.remove(t)
+                        st.success(f"Usunięto cały towar: {wybrany}")
+                    else:
+                        t["ilosc"] -= ilosc_do_usuniecia
+                        st.success(
+                            f"Usunięto {ilosc_do_usuniecia} szt. z {wybrany}"
+                        )
+                    st.experimental_rerun()
+else:
+    st.info("Brak towarów do usunięcia.")
