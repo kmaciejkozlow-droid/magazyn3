@@ -1,4 +1,7 @@
+from supabase import create_client
 import streamlit as st
+
+
 
 st.set_page_config(page_title="Prosty magazyn", page_icon="📦")
 
