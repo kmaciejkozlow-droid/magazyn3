@@ -10,6 +10,11 @@ def init_supabase():
 
 supabase = init_supabase()
 
+try:
+    supabase.table("magazyn").select("id").limit(1).execute()
+    st.success("✅ Połączono z Supabase")
+except Exception as e:
+    st.error(f"❌ Błąd połączenia: {e}")
 
 
 
