@@ -13,8 +13,11 @@ supabase = init_supabase()
 
 # --- Test połączenia ---
 try:
-    supabase.table("magazyn").select("id").limit(1).execute()
-    st.success("✅ Połączono z Supabase")
+    test = supabase.table("magazyn").select("id").limit(1).execute()
+    if test.status_code == 200:
+        st.success("✅ Połączono z Supabase")
+    else:
+        st.error("❌ Błąd połączenia z Supabase")
 except Exception as e:
     st.error(f"❌ Błąd połączenia: {e}")
 
@@ -25,9 +28,9 @@ st.title("📦 Prosty magazyn towarów")
 # --- Pobranie produktów z Supabase ---
 if "magazyn" not in st.session_state:
     result = supabase.table("magazyn").select("*").execute()
-    if result.error:
+    if result.status_code != 200 or result.data is None:
         st.session_state.magazyn = []
-        st.error(f"Błąd pobierania danych: {result.error.message}")
+        st.error("Błąd pobierania danych z Supabase")
     else:
         st.session_state.magazyn = result.data
 
@@ -46,11 +49,10 @@ with st.form("dodaj_towar"):
             "cena": cena
         }).execute()
 
-        if response.error:
-            st.error(f"Błąd dodawania: {response.error.message}")
+        if response.status_code != 201:
+            st.error("Błąd dodawania produktu")
         else:
             st.success(f"Dodano towar: {nazwa}")
-            # Odświeżenie listy magazynu
             st.session_state.magazyn.append(response.data[0])
 
 # --- Wyświetlanie magazynu ---
@@ -63,8 +65,8 @@ if st.session_state.magazyn:
         col3.write(f"Cena: {towar['cena']} zł")
         if col4.button("❌", key=f"usun_{i}"):
             response = supabase.table("magazyn").delete().eq("id", towar["id"]).execute()
-            if response.error:
-                st.error(f"Błąd usuwania: {response.error.message}")
+            if response.status_code != 200:
+                st.error("Błąd usuwania towaru")
             else:
                 st.session_state.magazyn.pop(i)
                 st.experimental_rerun()
@@ -101,8 +103,8 @@ if st.session_state.magazyn:
                     nowa_ilosc = t["ilosc"] - ilosc_do_usuniecia
                     if nowa_ilosc <= 0:
                         response = supabase.table("magazyn").delete().eq("id", t["id"]).execute()
-                        if response.error:
-                            st.error(f"Błąd usuwania: {response.error.message}")
+                        if response.status_code != 200:
+                            st.error("Błąd usuwania towaru")
                         else:
                             st.session_state.magazyn.remove(t)
                             st.success(f"Usunięto cały towar: {wybrany}")
@@ -110,8 +112,8 @@ if st.session_state.magazyn:
                         response = supabase.table("magazyn").update({
                             "ilosc": nowa_ilosc
                         }).eq("id", t["id"]).execute()
-                        if response.error:
-                            st.error(f"Błąd aktualizacji: {response.error.message}")
+                        if response.status_code != 200:
+                            st.error("Błąd aktualizacji towaru")
                         else:
                             t["ilosc"] = nowa_ilosc
                             st.success(f"Usunięto {ilosc_do_usuniecia} szt. z {wybrany}")
