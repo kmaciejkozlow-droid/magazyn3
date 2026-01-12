@@ -14,10 +14,10 @@ supabase = init_supabase()
 # --- Test połączenia ---
 try:
     test = supabase.table("magazyn").select("id").limit(1).execute()
-    if test.status_code == 200:
+    if test.data is not None:
         st.success("✅ Połączono z Supabase")
     else:
-        st.error("❌ Błąd połączenia z Supabase")
+        st.error("❌ Nie udało się pobrać danych z Supabase")
 except Exception as e:
     st.error(f"❌ Błąd połączenia: {e}")
 
@@ -25,16 +25,16 @@ except Exception as e:
 st.set_page_config(page_title="Prosty magazyn", page_icon="📦")
 st.title("📦 Prosty magazyn towarów")
 
-# --- Pobranie produktów z Supabase ---
+# --- Pobranie danych z Supabase ---
 if "magazyn" not in st.session_state:
-    result = supabase.table("magazyn").select("*").execute()
-    if result.status_code != 200 or result.data is None:
+    try:
+        response = supabase.table("magazyn").select("*").execute()
+        st.session_state.magazyn = response.data or []
+    except Exception as e:
         st.session_state.magazyn = []
-        st.error("Błąd pobierania danych z Supabase")
-    else:
-        st.session_state.magazyn = result.data
+        st.error(f"Błąd pobierania danych: {e}")
 
-# --- Formularz dodawania towaru ---
+# --- Dodawanie towaru ---
 with st.form("dodaj_towar"):
     st.subheader("Dodaj towar")
     nazwa = st.text_input("Nazwa towaru")
@@ -43,17 +43,19 @@ with st.form("dodaj_towar"):
     dodaj = st.form_submit_button("Dodaj")
 
     if dodaj and nazwa:
-        response = supabase.table("magazyn").insert({
-            "nazwa": nazwa,
-            "ilosc": ilosc,
-            "cena": cena
-        }).execute()
-
-        if response.status_code != 201:
-            st.error("Błąd dodawania produktu")
-        else:
-            st.success(f"Dodano towar: {nazwa}")
-            st.session_state.magazyn.append(response.data[0])
+        try:
+            result = supabase.table("magazyn").insert({
+                "nazwa": nazwa,
+                "ilosc": ilosc,
+                "cena": cena
+            }).execute()
+            if result.data:
+                st.session_state.magazyn.append(result.data[0])
+                st.success(f"Dodano towar: {nazwa}")
+            else:
+                st.error("Nie udało się dodać towaru")
+        except Exception as e:
+            st.error(f"Błąd dodawania: {e}")
 
 # --- Wyświetlanie magazynu ---
 st.subheader("Stan magazynu")
@@ -63,17 +65,18 @@ if st.session_state.magazyn:
         col1.write(towar["nazwa"])
         col2.write(f"Ilość: {towar['ilosc']}")
         col3.write(f"Cena: {towar['cena']} zł")
+
         if col4.button("❌", key=f"usun_{i}"):
-            response = supabase.table("magazyn").delete().eq("id", towar["id"]).execute()
-            if response.status_code != 200:
-                st.error("Błąd usuwania towaru")
-            else:
+            try:
+                supabase.table("magazyn").delete().eq("id", towar["id"]).execute()
                 st.session_state.magazyn.pop(i)
                 st.experimental_rerun()
+            except Exception as e:
+                st.error(f"Błąd usuwania: {e}")
 else:
     st.info("Magazyn jest pusty.")
 
-# --- Podsumowanie wartości magazynu ---
+# --- Podsumowanie ---
 st.subheader("Podsumowanie")
 wartosc = sum(t["ilosc"] * float(t["cena"]) for t in st.session_state.magazyn)
 st.write(f"Łączna wartość magazynu: **{wartosc:.2f} zł**")
@@ -81,7 +84,7 @@ st.write(f"Łączna wartość magazynu: **{wartosc:.2f} zł**")
 st.divider()
 st.caption("Aplikacja demonstracyjna – dane zapisywane w Supabase.")
 
-# --- Formularz usuwania / wydania towaru ---
+# --- Usuwanie / wydawanie towaru ---
 st.divider()
 st.subheader("Usuń / wydaj towar")
 
@@ -101,22 +104,20 @@ if st.session_state.magazyn:
             for t in st.session_state.magazyn:
                 if t["nazwa"] == wybrany:
                     nowa_ilosc = t["ilosc"] - ilosc_do_usuniecia
-                    if nowa_ilosc <= 0:
-                        response = supabase.table("magazyn").delete().eq("id", t["id"]).execute()
-                        if response.status_code != 200:
-                            st.error("Błąd usuwania towaru")
-                        else:
+
+                    try:
+                        if nowa_ilosc <= 0:
+                            supabase.table("magazyn").delete().eq("id", t["id"]).execute()
                             st.session_state.magazyn.remove(t)
                             st.success(f"Usunięto cały towar: {wybrany}")
-                    else:
-                        response = supabase.table("magazyn").update({
-                            "ilosc": nowa_ilosc
-                        }).eq("id", t["id"]).execute()
-                        if response.status_code != 200:
-                            st.error("Błąd aktualizacji towaru")
                         else:
+                            supabase.table("magazyn").update({
+                                "ilosc": nowa_ilosc
+                            }).eq("id", t["id"]).execute()
                             t["ilosc"] = nowa_ilosc
                             st.success(f"Usunięto {ilosc_do_usuniecia} szt. z {wybrany}")
-                    st.rerun()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Błąd aktualizacji: {e}")
 else:
     st.info("Brak towarów do usunięcia.")
